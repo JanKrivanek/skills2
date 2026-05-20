@@ -53,8 +53,32 @@ Do not create new test files without first identifying where existing tests for 
 **Direct (default):** Do this yourself with `view`/`grep`/`glob` — no sub-agent. You must establish, before writing any tests:
 
 1. **Target symbol(s) to test.** Read the source file. Identify the *smallest* exported function/class named in the task. If the task names a function `foo()`, your tests MUST call `foo()` directly — not a wrapper that happens to invoke it.
-2. **Existing test file location.** Search the repo for tests that already cover the same module (`grep` for the symbol name in `**/*test*` / `**/test_*` / `**/*_test.*` / `**/*.test.*`). New tests go in the **same file** if one exists, otherwise in the **same directory** mirroring the source path. Note this path explicitly — placement is graded.
-3. **Test framework + invocation convention.** Read 1-2 existing test files to learn: import style, fixture/setup pattern, assertion API, naming convention (`test_foo_bar` vs `TestFooBar`), how to run a single test.
+
+2. **Existing test file location — exhaustive search.**
+
+   Run BOTH of these searches before deciding where tests go:
+
+   ```
+   grep -rln "<TargetFunctionName>\|<TargetClassName>" --include="*test*" --include="*Test*" .
+   ls <test_dir_for_target_module>
+   ```
+
+   **STRONG DEFAULT:** place new tests in the file with the most existing matches for the symbol, or in the file whose name mirrors the source file (e.g. source `foo.py` → test `test_foo.py` if that file exists; source `Handler.go` → `handler_test.go`).
+
+   **Creating a NEW test file is FORBIDDEN unless ALL of the following hold:**
+   - No existing test file references the target symbol(s), AND
+   - The codebase has no convention of grouping tests for this module into a single existing file, AND
+   - The task spec does not name an explicit target test file path.
+
+   If the task statement or rubric mentions an explicit file path (e.g., "add tests to `kitty_tests/screen.py`", "in `pkg/handlers/handlers_test.go`"), that path is **mandatory** — always edit that file, never create a new one alongside it. This is the single most common failure mode; treat it as a hard rule.
+
+3. **Test framework + invocation convention.** Read 2-3 existing test functions in the chosen target file. Note exactly:
+   - The import style.
+   - The setup/teardown fixture pattern.
+   - **The assertion helpers used (e.g., `self.ae`, `t.Errorf`, `assert.Equal`).** Your new tests MUST use the same helpers. Do not introduce a different assertion API (e.g., do not use `self.assertGreater` if existing tests use `self.ae`; do not use `t.Fatalf` if existing tests use `t.Errorf`).
+   - The naming convention (`test_foo_bar` vs `TestFooBar`).
+   - How to run a single test.
+
 4. **Language-specific guidance.** Call `skill({ skill: "code-testing-extensions" })` and read the relevant `<lang>.md` file. Required before writing any code.
 
 **Single pass / Iterative only:** Call the `code-testing-researcher` sub-agent and quote the testing objective verbatim:
@@ -101,6 +125,23 @@ task({ agent_type: "dotnet-test:code-testing-implementer", name: "implementer", 
 - **Required:** every test must have at least one assertion that pins an **exact value** or an **exact structural shape** of the function's output.
 - **Mutation rehearsal:** before declaring a test done, ask yourself "if the function under test returned a constant default / empty / null, would my assertions still pass?" If yes, strengthen them.
 - **Test the named symbol directly:** if the task spec names function `foo`, your test invokes `foo` (not a parent function that transitively calls it). Integration paths give weaker mutation coverage.
+
+**Spec-variant fidelity rules (highest-impact in practice):**
+
+The spec often uses precise adjectives or quantifiers — these are graded literally. When you see them, your test inputs MUST match:
+
+- *"non-alphabetic such as space"* → a test input that is actually space/digit/punctuation, not a letter.
+- *"around 500ms"* / *"approximately N"* → use a value within ±10% of N, not an order-of-magnitude different value.
+- *"multiple dashes"* → input must contain at least two of the thing.
+- *"trailing whitespace preserved"* → assert the whitespace is still there (not trimmed).
+- *"4-member family"* / specific counts → use that exact count.
+- *"e.g., `testdir.zip`"* / *"such as `foo.bar`"* → use that exact example as the input.
+- *"two adjacent rows are different"* / *"X differs from Y"* → add an explicit relational assertion (`assertNotEqual(row[i], row[i+1])`), not separate assertions on each row.
+- *"returns exactly `[a, b, c]`"* → assert deep equality with the exact expected list, not `len() > 0` or `contains()`.
+
+Before writing each test, scan the spec sentence for adjectives/numbers/examples and explicitly transcribe them into your test inputs and expected values.
+
+**Style-mirroring rule:** Match the assertion API used by the test file's existing tests. If existing tests use `self.ae(...)`, use that — do not mix in `self.assertGreater`, `self.assertIn`, etc. If existing Go tests use `t.Errorf`, do not use `t.Fatalf`. Style-conformance rubrics are common nice-to-haves and cheap to satisfy.
 
 ### Step 6: Final Build Validation
 
