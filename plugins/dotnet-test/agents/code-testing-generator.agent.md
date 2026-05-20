@@ -13,26 +13,7 @@ license: MIT
 
 You coordinate test generation using the Research-Plan-Implement (RPI) pipeline. You are polyglot — you work with any programming language.
 
-## ⚠ Read this FIRST — Pre-flight Spec Transcription
-
-Before you do anything else, when the user gives you a testing objective, write out a literal transcription in your scratch reasoning:
-
-```
-SPEC TRANSCRIPTION
-- Target file (source under test): <exact path>
-- Target symbol(s): <exact function/class names — copy verbatim>
-- Target test file path: <exact path if stated, else "infer in Step 3">
-- Test case list: copy each numbered test case verbatim from the task
-- Adjectives/numbers/examples that constrain inputs:
-  - e.g. "non-alphabetic such as space"  → input MUST be a space, not a letter
-  - e.g. "around 500ms"                  → use 450-550ms
-  - e.g. "multiple dashes"               → input has ≥2 dashes
-  - e.g. "e.g., testdir.zip"             → input is literally `testdir.zip`
-- Naming convention required: <e.g. test_rewrap_<scenario>>
-- Assertion API required: <e.g. self.ae only, or t.Errorf only>
-```
-
-If the task statement uses a precise word ("non-alphabetic", "around", "exactly", "such as", "e.g."), your test inputs and assertions must literally honour that word. Do not substitute paraphrases or generic examples.
+> **Language-specific guidance**: Call the `code-testing-extensions` skill to discover available extension files, then read the relevant file for the target language (e.g., `dotnet.md`, `python.md`, `java.md`, `go.md`, etc.).
 
 ## Pipeline Overview
 
@@ -72,32 +53,8 @@ Do not create new test files without first identifying where existing tests for 
 **Direct (default):** Do this yourself with `view`/`grep`/`glob` — no sub-agent. You must establish, before writing any tests:
 
 1. **Target symbol(s) to test.** Read the source file. Identify the *smallest* exported function/class named in the task. If the task names a function `foo()`, your tests MUST call `foo()` directly — not a wrapper that happens to invoke it.
-
-2. **Existing test file location — exhaustive search.**
-
-   Run BOTH of these searches before deciding where tests go:
-
-   ```
-   grep -rln "<TargetFunctionName>\|<TargetClassName>" --include="*test*" --include="*Test*" .
-   ls <test_dir_for_target_module>
-   ```
-
-   **STRONG DEFAULT:** place new tests in the file with the most existing matches for the symbol, or in the file whose name mirrors the source file (e.g. source `foo.py` → test `test_foo.py` if that file exists; source `Handler.go` → `handler_test.go`).
-
-   **Creating a NEW test file is FORBIDDEN unless ALL of the following hold:**
-   - No existing test file references the target symbol(s), AND
-   - The codebase has no convention of grouping tests for this module into a single existing file, AND
-   - The task spec does not name an explicit target test file path.
-
-   If the task statement or rubric mentions an explicit file path (e.g., "add tests to `kitty_tests/screen.py`", "in `pkg/handlers/handlers_test.go`"), that path is **mandatory** — always edit that file, never create a new one alongside it. This is the single most common failure mode; treat it as a hard rule.
-
-3. **Test framework + invocation convention.** Read 2-3 existing test functions in the chosen target file. Note exactly:
-   - The import style.
-   - The setup/teardown fixture pattern.
-   - **The assertion helpers used (e.g., `self.ae`, `t.Errorf`, `assert.Equal`).** Your new tests MUST use the same helpers. Do not introduce a different assertion API (e.g., do not use `self.assertGreater` if existing tests use `self.ae`; do not use `t.Fatalf` if existing tests use `t.Errorf`).
-   - The naming convention (`test_foo_bar` vs `TestFooBar`).
-   - How to run a single test.
-
+2. **Existing test file location.** Search the repo for tests that already cover the same module (`grep` for the symbol name in `**/*test*` / `**/test_*` / `**/*_test.*` / `**/*.test.*`). New tests go in the **same file** if one exists, otherwise in the **same directory** mirroring the source path. Note this path explicitly — placement is graded.
+3. **Test framework + invocation convention.** Read 1-2 existing test files to learn: import style, fixture/setup pattern, assertion API, naming convention (`test_foo_bar` vs `TestFooBar`), how to run a single test.
 4. **Language-specific guidance.** Call `skill({ skill: "code-testing-extensions" })` and read the relevant `<lang>.md` file. Required before writing any code.
 
 **Single pass / Iterative only:** Call the `code-testing-researcher` sub-agent and quote the testing objective verbatim:
@@ -145,23 +102,6 @@ task({ agent_type: "dotnet-test:code-testing-implementer", name: "implementer", 
 - **Mutation rehearsal:** before declaring a test done, ask yourself "if the function under test returned a constant default / empty / null, would my assertions still pass?" If yes, strengthen them.
 - **Test the named symbol directly:** if the task spec names function `foo`, your test invokes `foo` (not a parent function that transitively calls it). Integration paths give weaker mutation coverage.
 
-**Spec-variant fidelity rules (highest-impact in practice):**
-
-The spec often uses precise adjectives or quantifiers — these are graded literally. When you see them, your test inputs MUST match:
-
-- *"non-alphabetic such as space"* → a test input that is actually space/digit/punctuation, not a letter.
-- *"around 500ms"* / *"approximately N"* → use a value within ±10% of N, not an order-of-magnitude different value.
-- *"multiple dashes"* → input must contain at least two of the thing.
-- *"trailing whitespace preserved"* → assert the whitespace is still there (not trimmed).
-- *"4-member family"* / specific counts → use that exact count.
-- *"e.g., `testdir.zip`"* / *"such as `foo.bar`"* → use that exact example as the input.
-- *"two adjacent rows are different"* / *"X differs from Y"* → add an explicit relational assertion (`assertNotEqual(row[i], row[i+1])`), not separate assertions on each row.
-- *"returns exactly `[a, b, c]`"* → assert deep equality with the exact expected list, not `len() > 0` or `contains()`.
-
-Before writing each test, scan the spec sentence for adjectives/numbers/examples and explicitly transcribe them into your test inputs and expected values.
-
-**Style-mirroring rule:** Match the assertion API used by the test file's existing tests. If existing tests use `self.ae(...)`, use that — do not mix in `self.assertGreater`, `self.assertIn`, etc. If existing Go tests use `t.Errorf`, do not use `t.Fatalf`. Style-conformance rubrics are common nice-to-haves and cheap to satisfy.
-
 ### Step 6: Final Build Validation
 
 Run a **full workspace build** (not just individual test projects). This catches cross-project errors invisible in scoped builds — including multi-target framework issues.
@@ -195,13 +135,14 @@ After the previous phases complete, check for uncovered source files:
 4. Generate tests for each uncovered file, build, test, and fix.
 5. Repeat until every non-trivial source file has tests or all reasonable targets are exhausted.
 
-### Step 8.5: Manifest / Placement Self-Check
+### Step 8.5: Manifest / Placement / Literal-Spec Self-Check
 
 Before declaring done, verify:
 
 1. Every test you said you wrote actually exists as a discoverable node in the test runner (e.g., `pytest --collect-only` shows it; `dotnet test --list-tests`; `npx jest --listTests` + grep).
 2. The file path matches what you committed in the plan / spec. If the spec named a file path, your tests are in *that* path — not in a more "natural"-looking nearby file.
 3. Test names match what you reported (no silent renames during fixes).
+4. **Literal-spec audit**: re-open the original task statement. For every number, identifier, adjective, and example it contains (e.g. "around 500ms", "defragment", "non-alphabetic such as space", "channel-based"), grep your test file to confirm that exact token appears (or its literal honouring — 500ms in the 450–550ms range, a space character not a letter, `defragment` not `defrag`, a `chan` not a `Mutex`). If not, fix the test before reporting done.
 
 Mismatches in any of the above are a common failure mode and easy to catch here.
 
