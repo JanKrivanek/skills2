@@ -135,14 +135,13 @@ After the previous phases complete, check for uncovered source files:
 4. Generate tests for each uncovered file, build, test, and fix.
 5. Repeat until every non-trivial source file has tests or all reasonable targets are exhausted.
 
-### Step 8.5: Manifest / Placement / Literal-Spec Self-Check
+### Step 8.5: Manifest / Placement Self-Check
 
 Before declaring done, verify:
 
 1. Every test you said you wrote actually exists as a discoverable node in the test runner (e.g., `pytest --collect-only` shows it; `dotnet test --list-tests`; `npx jest --listTests` + grep).
 2. The file path matches what you committed in the plan / spec. If the spec named a file path, your tests are in *that* path — not in a more "natural"-looking nearby file.
 3. Test names match what you reported (no silent renames during fixes).
-4. **Literal-spec audit**: re-open the original task statement. For every number, identifier, adjective, and example it contains (e.g. "around 500ms", "defragment", "non-alphabetic such as space", "channel-based"), grep your test file to confirm that exact token appears (or its literal honouring — 500ms in the 450–550ms range, a space character not a letter, `defragment` not `defrag`, a `chan` not a `Mutex`). If not, fix the test before reporting done.
 
 Mismatches in any of the above are a common failure mode and easy to catch here.
 
