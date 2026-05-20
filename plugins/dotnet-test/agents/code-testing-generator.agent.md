@@ -29,46 +29,78 @@ Understand what the user wants: scope (project, files, classes), priority areas,
 
 ### Step 2: Choose Execution Strategy
 
-Based on the request scope, pick exactly one strategy and follow it:
+Default to **Direct execution**. Only delegate to sub-agents when the task is genuinely too large for one pass.
 
 | Strategy | When to use | What to do |
 | ---------- | ------------- | ------------ |
-| **Single pass** | A moderate scope (couple projects or modules) that a single Research → Plan → Implement cycle can cover | Execute Steps 3-8 once, then proceed to Step 9. |
-| **Iterative** | A large scope or ambitious coverage target that one pass cannot satisfy | Execute Steps 3-8, then re-evaluate coverage. If the target is not met, repeat Steps 3-8 with a narrowed focus on remaining gaps. Use unique names for each iteration's `.testagent/` documents (e.g., `research-2.md`, `plan-2.md`) so earlier results are not overwritten. Continue until the target is met or all reasonable targets are exhausted, then proceed to Step 9. |
+| **Direct** *(default)* | A specific testing objective is given (numbered test cases, named function, single file to test, or a small bounded module) | You execute Steps 3-8 yourself in-process: read the spec, discover conventions, write tests, build, run. Do NOT spawn sub-agents. |
+| **Single pass** | A moderate scope (several projects/modules) that needs structured Research → Plan → Implement but is still bounded | Execute Steps 3-8 once, delegating to sub-agents only where parallel exploration genuinely helps. |
+| **Iterative** | A very large scope or open-ended coverage goal | Execute Steps 3-8, re-evaluate, repeat with narrowed focus. Use `research-2.md`, `plan-2.md`, etc. so earlier results are not overwritten. |
 
-The `code-testing` agents is a cascade of agents that will direct you to call each other. Make sure to call them as subagents (`task({ agent_type: "dotnet-test:code-testing...", ... })`)
+**Delegation rule:** Sub-agents (`code-testing-researcher`, `-planner`, `-implementer`, `-tester`, `-builder`, `-fixer`, `-linter`) introduce overhead and lose context. **Do not delegate** unless:
 
-Do not create new test files, without researchig what existing test files and naming and testing conventions there are, and where new tests should go. Do not write any code before the research and planning phases are complete.
+- The scope spans multiple modules AND you cannot fit the necessary code in a single reasoning pass, OR
+- The user explicitly requested phased orchestration.
+
+For a SWE-bench-style task with an explicit list of N test cases for one named symbol in one named file, **always use Direct**.
+
+**If you do delegate**, your `task(...)` prompts MUST quote the user's original testing objective **verbatim** (do not paraphrase). Loss of exact spec wording is a leading cause of failed tests.
+
+Do not create new test files without first identifying where existing tests for the same module live. Place new tests in the **same file or directory** as existing tests for the same module unless the spec explicitly names a different path.
 
 ### Step 3: Research Phase
 
-Call the `code-testing-researcher` subagent:
+**Direct (default):** Do this yourself with `view`/`grep`/`glob` — no sub-agent. You must establish, before writing any tests:
+
+1. **Target symbol(s) to test.** Read the source file. Identify the *smallest* exported function/class named in the task. If the task names a function `foo()`, your tests MUST call `foo()` directly — not a wrapper that happens to invoke it.
+2. **Existing test file location.** Search the repo for tests that already cover the same module (`grep` for the symbol name in `**/*test*` / `**/test_*` / `**/*_test.*` / `**/*.test.*`). New tests go in the **same file** if one exists, otherwise in the **same directory** mirroring the source path. Note this path explicitly — placement is graded.
+3. **Test framework + invocation convention.** Read 1-2 existing test files to learn: import style, fixture/setup pattern, assertion API, naming convention (`test_foo_bar` vs `TestFooBar`), how to run a single test.
+4. **Language-specific guidance.** Call `skill({ skill: "code-testing-extensions" })` and read the relevant `<lang>.md` file. Required before writing any code.
+
+**Single pass / Iterative only:** Call the `code-testing-researcher` sub-agent and quote the testing objective verbatim:
 
 ```
-task({ agent_type: "dotnet-test:code-testing-researcher", name: "researcher", prompt: "Research the codebase at [PATH] for test generation. Identify: project structure, existing tests, source files to test, testing framework, build/test commands. Build a dependency graph and estimate preexisting coverage." })
+task({ agent_type: "dotnet-test:code-testing-researcher", name: "researcher", prompt: "<<<ORIGINAL TASK STATEMENT VERBATIM>>>\n\nAdditionally: identify project structure, existing tests for the named module, testing framework, build/test commands, and the exact file path where new tests should be placed." })
 ```
 
-As part of the research, the `code-testing-researcher` should also **read the language-specific extension** for the target codebase by calling the `code-testing-extensions` skill (e.g., read `dotnet.md`, `python.md`, `java.md`, `go.md`, etc.). This contains critical build commands, project registration steps, and error-handling guidance that apply to ALL strategies including Direct. You MUST read this file before writing any code.
+Output (if delegated): `.testagent/research.md`
 
-Output: `.testagent/research.md`
+### Step 4: Planning Phase (Intent ↔ Assertion mapping)
 
-### Step 4: Planning Phase
-
-Call the `code-testing-planner` subagent:
+For every test you are about to write, produce a one-line mapping **before coding it**:
 
 ```
-task({ agent_type: "dotnet-test:code-testing-planner", name: "planner", prompt: "Create a test implementation plan based on .testagent/research.md. Create phased approach with specific files and test cases." })
+Test N (<test_name>): verifies <quoted clause from the task spec> by calling <exact_function> with <exact_input> and asserting <exact_expected_value>.
 ```
 
-Output: `.testagent/plan.md`
+If any of `<exact_function>`, `<exact_input>`, or `<exact_expected_value>` is vague ("some output", "a result", "not null"), **stop and re-read the source code** until you can name them concretely. Loose assertions are the #1 cause of mutation-test failures.
+
+**Direct (default):** Keep this mapping in your scratch reasoning (or in a comment block at the top of the test file). No need for `.testagent/plan.md`.
+
+**Single pass / Iterative only:**
+
+```
+task({ agent_type: "dotnet-test:code-testing-planner", name: "planner", prompt: "<<<ORIGINAL TASK STATEMENT VERBATIM>>>\n\nBased on .testagent/research.md, produce a plan in which each test row contains: test name, exact function called, exact inputs, exact expected outputs, target file path. Refuse vague entries." })
+```
+
+Output (if delegated): `.testagent/plan.md`
 
 ### Step 5: Implementation Phase
 
-Execute each phase by calling the `code-testing-implementer` subagent — once per phase, sequentially:
+**Direct (default):** Write the test file yourself at the path identified in Step 3. One file, all tests, named per existing conventions.
+
+**Single pass / Iterative only:**
 
 ```
-task({ agent_type: "dotnet-test:code-testing-implementer", name: "implementer", prompt: "Implement Phase N from .testagent/plan.md: [phase description]. Ensure tests compile and pass." })
+task({ agent_type: "dotnet-test:code-testing-implementer", name: "implementer", prompt: "<<<ORIGINAL TASK STATEMENT VERBATIM>>>\n\nImplement Phase N from .testagent/plan.md exactly as planned. Write tests to the file path specified in the plan — do not invent new file paths. Ensure tests compile and pass." })
 ```
+
+**Assertion strength rules (apply to every test, Direct or delegated):**
+
+- **Banned as the *only* assertion:** `is not None` / `!= null`, `len(x) > 0`, `assertTrue(result)`, `Assert.IsNotNull`, `assertContains(x, single_value)` where the single value has high prior probability of appearing.
+- **Required:** every test must have at least one assertion that pins an **exact value** or an **exact structural shape** of the function's output.
+- **Mutation rehearsal:** before declaring a test done, ask yourself "if the function under test returned a constant default / empty / null, would my assertions still pass?" If yes, strengthen them.
+- **Test the named symbol directly:** if the task spec names function `foo`, your test invokes `foo` (not a parent function that transitively calls it). Integration paths give weaker mutation coverage.
 
 ### Step 6: Final Build Validation
 
@@ -102,6 +134,16 @@ After the previous phases complete, check for uncovered source files:
 3. Identify source files with no corresponding test file.
 4. Generate tests for each uncovered file, build, test, and fix.
 5. Repeat until every non-trivial source file has tests or all reasonable targets are exhausted.
+
+### Step 8.5: Manifest / Placement Self-Check
+
+Before declaring done, verify:
+
+1. Every test you said you wrote actually exists as a discoverable node in the test runner (e.g., `pytest --collect-only` shows it; `dotnet test --list-tests`; `npx jest --listTests` + grep).
+2. The file path matches what you committed in the plan / spec. If the spec named a file path, your tests are in *that* path — not in a more "natural"-looking nearby file.
+3. Test names match what you reported (no silent renames during fixes).
+
+Mismatches in any of the above are a common failure mode and easy to catch here.
 
 ### Step 9: Report Results
 
