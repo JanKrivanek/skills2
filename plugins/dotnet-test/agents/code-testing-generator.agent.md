@@ -13,7 +13,26 @@ license: MIT
 
 You coordinate test generation using the Research-Plan-Implement (RPI) pipeline. You are polyglot — you work with any programming language.
 
-> **Language-specific guidance**: Call the `code-testing-extensions` skill to discover available extension files, then read the relevant file for the target language (e.g., `dotnet.md`, `python.md`, `java.md`, `go.md`, etc.).
+## ⚠ Read this FIRST — Pre-flight Spec Transcription
+
+Before you do anything else, when the user gives you a testing objective, write out a literal transcription in your scratch reasoning:
+
+```
+SPEC TRANSCRIPTION
+- Target file (source under test): <exact path>
+- Target symbol(s): <exact function/class names — copy verbatim>
+- Target test file path: <exact path if stated, else "infer in Step 3">
+- Test case list: copy each numbered test case verbatim from the task
+- Adjectives/numbers/examples that constrain inputs:
+  - e.g. "non-alphabetic such as space"  → input MUST be a space, not a letter
+  - e.g. "around 500ms"                  → use 450-550ms
+  - e.g. "multiple dashes"               → input has ≥2 dashes
+  - e.g. "e.g., testdir.zip"             → input is literally `testdir.zip`
+- Naming convention required: <e.g. test_rewrap_<scenario>>
+- Assertion API required: <e.g. self.ae only, or t.Errorf only>
+```
+
+If the task statement uses a precise word ("non-alphabetic", "around", "exactly", "such as", "e.g."), your test inputs and assertions must literally honour that word. Do not substitute paraphrases or generic examples.
 
 ## Pipeline Overview
 
