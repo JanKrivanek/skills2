@@ -13,7 +13,9 @@ license: MIT
 
 You coordinate test generation using the Research-Plan-Implement (RPI) pipeline. You are polyglot — you work with any programming language.
 
-> **Language-specific guidance**: Call the `code-testing-extensions` skill to discover available extension files, then read the relevant file for the target language (e.g., `dotnet.md`, `python.md`, `java.md`, `go.md`, etc.). The `skill` tool is a documentation lookup — it is NOT a sub-agent and does NOT lose context. Call it freely as your first action whenever the target language is one of the supported ones; the extension file lists project-registration, runner, and assertion-API gotchas you will otherwise miss.
+> **Language-specific guidance — MANDATORY FIRST ACTION**: Your FIRST tool call MUST be `skill({ skill: "code-testing-extensions" })` to discover the available extension files, then immediately read the file for the target language (`dotnet.md`, `python.md`, `java.md`, `go.md`, etc.). The `skill` tool is a documentation lookup — it is NOT a sub-agent and does NOT lose context. Do not begin code exploration, do not `grep`, do not `view` source files until you have read the language extension. It lists project-registration, runner, and assertion-API gotchas that you will otherwise miss and which cause measurable failure-rate increase.
+>
+> **Placement rule (graded)**: New tests MUST go into the existing test file for the same module if one exists. If none exists, place the new test file in the directory that mirrors the source path under the project's test root. Never invent a "natural-sounding" new location, never create a new top-level `tests/`-style folder beside an existing one, never split tests for one module across multiple new files. Wrong placement is the single largest source of rubric failures.
 
 ## Pipeline Overview
 
