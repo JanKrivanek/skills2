@@ -13,9 +13,11 @@ license: MIT
 
 You write unit tests for a given testing objective. Polyglot — any language.
 
-The user will hand you a task that names: a source file, a symbol (function/class), and a list of test cases or rubrics. **Do all the work yourself in one pass.** Do not spawn sub-agents — they lose context and never help.
+The user will hand you a task that lists test cases (often numbered: "1. ...", "2. ...") for some functionality. **Do all the work yourself in one pass.** Do not spawn sub-agents — they lose context and never help.
 
 ## Hard rules (read before doing anything)
+
+0. **One test per case, no exceptions.** If the task lists N cases (numbered or bulleted), you write N tests minimum — one for each, with that case's specifics in the test name and body. A missing case fails the rubric for that case, no partial credit. Before writing any test, copy each numbered case into a scratch list and check them off as you write.
 
 1. **Placement is graded.** Put new tests in the existing test file for the same module, or — if none — in the directory mirroring the source path under the project's test root. Never invent a "natural-sounding" new location.
 2. **Test the named symbol directly.** If the task names `foo`, your test must call `foo` with concrete inputs and assert on `foo`'s return value. Tests that exercise `foo` only via a wrapper get partial credit at best.
@@ -25,44 +27,48 @@ The user will hand you a task that names: a source file, a symbol (function/clas
 
 ## Procedure
 
-### 1. Scope and conventions
+### 1. Enumerate the cases
 
-- Read the task statement once carefully. In your scratch reasoning, list every test case mentioned, plus every concrete number / identifier / adjective / example that constrains an input.
-- `view` the target source file and locate the named symbol. Read enough of its implementation to know what it returns for the inputs the task lists.
-- `grep` the repo for existing tests of the same module. Use the symbol name and the module name. Record the file path you will write to.
-- Read one or two existing tests in that file to learn the framework, assertion API, naming convention, and setup pattern.
-- If the language has a specific extension file (`dotnet.md`, `python.md`, etc.), call `skill({ skill: "code-testing-extensions" })` and read the relevant entry **before writing code** — it covers project registration and runner-specific gotchas.
+Read the task statement carefully. Write a numbered list in scratch reasoning of every distinct test case the task asks for — including each numbered/bulleted item, each example file, each scenario adjective. This list is your contract; you must produce one test per item. Also note every concrete number / identifier / adjective / example token from the task — these are inputs you must use literally, not paraphrase.
 
-### 2. Plan each test (intent → assertion)
+### 2. Find the code and the existing tests
 
-For every test you are about to write, jot a one-liner in scratch reasoning:
+- `grep`/`view` to find the source code that implements each case. Identify the exact functions/classes you will call.
+- `grep` the repo for existing tests of the same module (search by function name and module name). The new tests go **into the existing test file** if one exists; otherwise into the directory mirroring the source path. Write down the chosen path now.
+- Read one or two existing tests in that file to learn framework, assertion API, naming convention, fixture/setup pattern.
+- If a language extension file is available, call `skill({ skill: "code-testing-extensions" })` once and read the relevant `<lang>.md` entry — it has project-registration and runner gotchas you will otherwise miss.
+
+### 3. Plan each test (intent → assertion)
+
+For every numbered case from step 1, jot a one-liner in scratch reasoning:
 
 ```
-Test N (<test_name>): verifies "<quoted clause from the task spec>" by calling <exact_function>(<exact_inputs>) and asserting <exact_expected_value>.
+Case N → test_<name>: verifies "<quoted clause from the task>" by calling <exact_function>(<exact_inputs_using_literal_spec_tokens>) and asserting <exact_expected_value>.
 ```
 
-If any of those three placeholders is vague, re-read the source until you can name them concretely.
+If any of `<exact_function>`, `<exact_inputs>`, or `<exact_expected_value>` is vague, re-read the source until you can name them concretely. Inputs MUST contain the literal tokens from the task (the exact filename, the exact number, the exact adjective example).
 
-### 3. Write the tests
+### 4. Write the tests
 
-Add them to the existing test file you identified in step 1, or create a file at the mirrored path if none exists. Use the existing style verbatim. One file, all the tests for this objective.
+Write them all into the chosen test file in one editing pass. Use the existing style verbatim — same assertion API, same naming convention, same imports, same setup pattern. Each test name should encode which numbered case it covers (e.g. `test_add_subject_prefix_when_subject_already_present`).
 
-### 4. Build and run
+### 5. Build and run
 
 Build the project / package / module. Run the tests you just added (and, if cheap, the whole test file). Fix compile and runtime errors. If a test fails because the expected value is wrong, re-read the source and fix the expected — never `[Ignore]`, `[Skip]`, comment-out, or weaken an assertion to make it pass.
 
-### 5. Self-check before declaring done
+### 6. Self-check before declaring done
 
 Re-open the task statement and verify, in order:
 
-1. **Placement:** the file path matches what the spec named (or the existing-tests convention you found).
-2. **Symbol:** every test calls the exact symbol the spec names — not a wrapper, not a renamed alias.
-3. **Spec tokens:** every number, identifier, adjective, and example from the spec appears literally in either a test input or an assertion. Grep your test file for each one. If any is missing, fix the test.
-4. **Assertion strength:** no test is satisfied by a function that returns a default value. Mentally substitute `return null` / `return 0` / `return []` into the symbol and confirm at least one assertion in every test would fail.
-5. **Style:** your new tests use the same assertion API as the rest of the file.
-6. **Discoverability:** the test runner enumerates the tests you added (`pytest --collect-only`, `dotnet test --list-tests`, `go test -list .*`, `npx jest --listTests`).
+1. **Completeness:** count the numbered cases in the task; count your tests; counts match. No case left without a dedicated test.
+2. **Placement:** the file path matches what the spec named (or the existing-tests convention you found in step 2).
+3. **Symbol:** every test calls the exact symbol the spec names — not a wrapper, not a renamed alias.
+4. **Spec tokens:** every distinctive number, identifier, adjective, filename, and example from the task appears literally somewhere in your test file. Grep your file for each one — `"500ms"`, `"testdir.zip"`, the literal space char, etc. If any is missing, fix the test.
+5. **Assertion strength:** no test is satisfied by a function that returns a default value. Mentally substitute `return null` / `return 0` / `return []` into the symbol and confirm at least one assertion in every test would fail.
+6. **Style:** your new tests use the same assertion API as the rest of the file.
+7. **Discoverability:** the test runner enumerates the tests you added (`pytest --collect-only`, `dotnet test --list-tests`, `go test -list .*`, `npx jest --listTests`).
 
-Only after all six pass, report done.
+Only after all seven pass, report done.
 
 ## Reporting
 
